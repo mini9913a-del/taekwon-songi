@@ -304,7 +304,7 @@ let P=null,lastJumpFrame=-99;
 
 function newPlayer(){return{y:GROUND,vy:0,onGround:true,jumps:0,coyote:0,buffer:0,slide:false,slideHold:0,spin:0,kickT:0,kickCd:0,inv:0,anim:0,lastPit:null};}
 function setState(s){state=s;stateT=0;}
-function startStage(i){stageIdx=i;pendingZap=0;S=genStage(i);dist=0;speed=S.def.speed[0];slowT=0;P=newPlayer();particles=[];floaters=[];debris=[];}
+function startStage(i){stageIdx=i;pendingZap=0;pendingSlip=0;S=genStage(i);dist=0;speed=S.def.speed[0];slowT=0;P=newPlayer();particles=[];floaters=[];debris=[];}
 function beginAt(i){hearts=1;tries=1;startStage(i);setState('intro');}
 function retryStage(){hearts=1;tries++;startStage(stageIdx);setState('intro');}
 function nextStage(){
@@ -326,7 +326,7 @@ function die(cause){
   deathCause=cause;totalDeaths++;try{localStorage.setItem('songi-deaths',String(totalDeaths));}catch(e){}
   lastProg=stageProg();setState('down');SFX.over();
 }
-let god=false,godCd=0;
+let god=false,godCd=0,pendingSlip=0;
 // Test-mode invincibility: show what would have killed Songi, then keep running.
 function godNote(label){if(godCd<=0){floatText(dist+PX,P.y-80,label+' (무적)','#9be38f');godCd=40;shake=4;}}
 function stuck(){
@@ -392,7 +392,16 @@ function updatePlay(){
   const wx=dist+PX;
 
   if(input.kick)doKick();
-  if(input.jp&&(P.onGround||P.coyote>0)&&onIce(wx)){if(slip())return;}
+  // On ice a touch first waits a few frames: if it turns into a swipe (kick/slide) it is not a jump, so no slip.
+  if(pendingSlip>0){
+    if(touch.gest)pendingSlip=0;
+    else if(touch.id===null||--pendingSlip===0){pendingSlip=0;if(slip())return;}
+  }
+  if(input.jp&&(P.onGround||P.coyote>0)&&onIce(wx)){
+    input.jp=false;
+    if(touch.id!==null&&frame-touch.downFrame<=2&&!touch.gest)pendingSlip=9;
+    else if(slip())return;
+  }
   if(P.buffer>0&&!input.jp&&P.onGround&&onIce(wx)){P.buffer=0;if(slip())return;}
   if(input.jp){
     if(P.onGround||P.coyote>0)doJump1();
