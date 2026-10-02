@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="태권송이가 점프·슬라이드·발차기로 30개 스테이지의 숨은 함정을 돌파하는 러닝 게임">
+<meta name="description" content="태권송이가 점프·슬라이드·발차기로 50개 스테이지의 숨은 함정을 돌파하는 러닝 게임">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -61,7 +61,7 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 <div class="wrap">
   <header>
     <h1><span>태권송이</span>의 대모험</h1>
-    <p>한 번만 부딪혀도 끝! 30개 스테이지, 숨은 함정을 외워서 돌파하세요.</p>
+    <p>한 번만 부딪혀도 끝! 50개 스테이지, 숨은 함정을 외워서 돌파하세요.</p>
   </header>
   <div class="screen"><canvas id="game" tabindex="0" aria-label="태권송이의 대모험 게임 화면"></canvas></div>
   <div class="bar">
@@ -137,6 +137,7 @@ const SFX={
   hit:()=>tone(300,70,0.35,'sawtooth',0.07),
   smash:()=>{tone(180,60,0.18,'square',0.1);setTimeout(()=>tone(1200,1600,0.08,'square',0.04),60);},
   warn:()=>tone(880,880,0.06,'square',0.03),
+  clang:()=>{tone(1400,1300,0.25,'square',0.05);setTimeout(()=>tone(220,90,0.3,'sawtooth',0.07),40);},
   zap:()=>{tone(1800,80,0.5,'sawtooth',0.09);setTimeout(()=>tone(120,40,0.6,'square',0.1),60);},
   clear:()=>[659,784,1046,784,1046].forEach((f,i)=>setTimeout(()=>tone(f,f*1.01,0.15,'square',0.045),i*120)),
   over:()=>[440,370,311,262].forEach((f,i)=>setTimeout(()=>tone(f,f*0.98,0.22,'triangle',0.08),i*180))
@@ -171,24 +172,31 @@ const STAGES=[
    pats:{fly:1,'fly-fly':3,'cone-fly':3,'pit-fly':3,'fly-bar':3,'wide-pit':2,tall:2,'jump-slide':2,'slide-jump':2,'pit-slide':2,'double-bar':2,'pit-pit':2,'tall-bar':2,'cone-cone':1}}
 ];
 /* Stages 11+: black-belt 실전 (real fights). Every 10 stages a new trap joins the pool and stays:
-   11–20 sticky floor (landing = stuck, needs a longer double jump) · 21–30 + lightning (double jump inside a hidden zone = struck). */
+   11–20 sticky floor (landing = stuck, needs a longer double jump) · 21–30 + lightning (double jump inside a hidden zone = struck)
+   31–40 + iron plates (don't kick) · 41–50 + ice (no jumping on it). */
 const BB_NAMES=['끈적한 공원','꿀 흘린 놀이터','찐득 강변','거미줄 다리','엿가락 골목','조청 공원','껌 붙은 놀이터','슬라임 강변','끈끈이 다리','끈끈이 심사',
-                '번쩍 공원','우르릉 놀이터','천둥 강변','벼락 다리','번개 골목','찌릿 공원','정전기 놀이터','폭풍 강변','낙뢰 다리','벼락 심사'];
+                '번쩍 공원','우르릉 놀이터','천둥 강변','벼락 다리','번개 골목','찌릿 공원','정전기 놀이터','폭풍 강변','낙뢰 다리','벼락 심사',
+                '쇳소리 공원','철판 놀이터','녹슨 강변','강철 다리','대장간 골목','무쇠 공원','철공소 놀이터','은빛 강변','쇠기둥 다리','철판 심사',
+                '살얼음 공원','얼음 놀이터','꽁꽁 강변','빙판 다리','고드름 골목','서리 공원','미끄럼 놀이터','얼어붙은 강변','눈보라 다리','빙판 심사'];
 const BB_THEMES=['park','park','river','river','night'];
 const BASE_PATS={fly:1,'fly-fly':1,'cone-fly':1,'pit-fly':1,'fly-bar':1,'wide-pit':1,tall:1,'jump-slide':1,'slide-jump':1,'pit-slide':1,'double-bar':1,'pit-pit':1,'tall-bar':1};
 const TRAP_PATS=[
   {sticky:2,'cone-sticky':4,'pit-sticky':3,'sticky-bar':2,'sticky-fly':2},
-  {'zap-pit':4,'zap-cones':3,'zap-fly':2,'zap-sticky':2}
+  {'zap-pit':4,'zap-cones':3,'zap-fly':2,'zap-sticky':2},
+  // 31–40 iron plate: looks like a board, but kicking it (or getting hit) fails — dodge it instead
+  {'iron-hi':3,'iron-lo':3,'fly-iron':3,'iron-fly':2,'iron-bar':2},
+  // 41–50 ice: jumping while standing on ice = slip; slide and kick still work
+  {'ice-bar':3,'ice-cone':3,'ice-pit':3,'ice-fly':2,'ice-long':1}
 ];
-const TRAP_INTRO=['이제부터 검은띠 실전 · 발밑을 조심하세요…','새 함정: 하늘을 조심하세요…'];
-const TRAP_FINAL=['cone-sticky','zap-pit'];
-for(let n=11;n<=30;n++){
+const TRAP_INTRO=['이제부터 검은띠 실전 · 발밑을 조심하세요…','새 함정: 하늘을 조심하세요…','새 함정: 날아오는 게 전부 송판은 아니에요…','새 함정: 발밑이 미끄러워요…'];
+const TRAP_FINAL=['cone-sticky','zap-pit','fly-iron','ice-cone'];
+for(let n=11;n<=50;n++){
   const k=(n-1)%10,band=Math.floor((n-1)/10);
   const sp0=Math.min(8.2,7.0+0.08*k+(band-1)*0.25);
   const pats=Object.assign({},BASE_PATS);
   for(let b=0;b<band;b++){const w=b===band-1?1.6:0.6;for(const key in TRAP_PATS[b])pats[key]=TRAP_PATS[b][key]*w*(b===band-1?1:1);}
   STAGES.push({name:BB_NAMES[n-11],theme:BB_THEMES[(n-1)%5],len:k===9?15000:11000+k*400,speed:[sp0,Math.min(9.5,sp0+1.1)],
-    react:[56-k*0.6,46-k*0.4],seed:100+n,fly:4.4+0.06*k,pats,trapIntro:k===0?TRAP_INTRO[band-1]:null,finalTrap:TRAP_FINAL[band-1]});
+    react:[56-k*0.6,46-k*0.4],seed:100+n,fly:4.4+0.06*k,pats,trapIntro:k===0?TRAP_INTRO[band-1]:null,finalTrap:TRAP_FINAL[band-1],snow:band>=4});
 }
 const OBS={cone:{w:28,h:36},tall:{w:38,h:134},bar:{w:64}};
 const BALLOON=['#ff5d73','#ffb000','#3ec1d3','#7bd389','#a77bff','#ff8fd0','#ff7a3d','#4d96ff','#ffe156'];
@@ -196,7 +204,7 @@ const AIR=2*-JUMP/GRAV;
 const speedAt=(def,x)=>def.speed[0]+(def.speed[1]-def.speed[0])*clamp(x/def.len,0,1);
 
 function genStage(i){
-  const def=STAGES[i],R=rng(def.seed),obs=[],pits=[],items=[],flies=[],sticky=[],zaps=[];
+  const def=STAGES[i],R=rng(def.seed),obs=[],pits=[],items=[],flies=[],sticky=[],zaps=[],ices=[];
   const lbl=(touch,key)=>coarse?touch:key;
   const add=(t,x,label)=>{
     const o={t,x,w:OBS[t].w,h:OBS[t].h||0,label};
@@ -205,7 +213,10 @@ function genStage(i){
   const pit=(x,w,label)=>pits.push({a:x,b:x+w,label});
   const goo=(x,w)=>sticky.push({a:x,b:x+w});
   const zap=(a,b)=>zaps.push({a,b});
-  const fly=(m,label)=>{const sp=speedAt(def,m),fs=def.fly||4;flies.push({m,x:m+VW+20-PX-sp*(VW+20-PX)/(sp+fs),y:GROUND-30,fs,active:false,broken:false,warned:false,label});};
+  const ice=(x,w)=>ices.push({a:x,b:x+w});
+  const fly=(m,label,kind,y)=>{const sp=speedAt(def,m),fs=def.fly||4;flies.push({m,x:m+VW+20-PX-sp*(VW+20-PX)/(sp+fs),y:y||GROUND-30,fs,active:false,broken:false,label,kind:kind||'board'});};
+  // iron plate: fixed height — high (slide under / jump over) or low (jump over)
+  const iron=(m,hi)=>fly(m,null,'iron',hi?GROUND-44:GROUND-18);
   let x=800;
   if(def.tutorial){
     add('cone',900,lbl('탭 = 점프','Space = 점프'));
@@ -257,11 +268,21 @@ function genStage(i){
       case 'zap-cones':{const g=reach*0.7;add('cone',x);add('cone',x+g);zap(x-reach*0.8,x+g+reach*0.3);x+=g+28;break;}
       case 'zap-fly':{fly(x);fly(x+sp*40);zap(x-reach*0.8,x+sp*40+reach*0.3);x+=sp*40+40;break;}
       case 'zap-sticky':{const w=reach*0.5;goo(x,w);zap(x-reach*0.8,x+w+reach*0.3);x+=w;break;}
+      case 'iron-hi':iron(x,true);x+=40;break;
+      case 'iron-lo':iron(x,false);x+=40;break;
+      case 'fly-iron':{const g=sp*36;fly(x);iron(x+g,R()<0.5);x+=g+40;break;}
+      case 'iron-fly':{const g=sp*36;iron(x,R()<0.5);fly(x+g);x+=g+40;break;}
+      case 'iron-bar':{const g=sp*20;iron(x,true);add('bar',x+g);x+=g+64;break;}
+      case 'ice-bar':{const w=reach*1.2;ice(x,w);add('bar',x+reach*0.35);x+=w;break;}
+      case 'ice-cone':{const w=reach*0.9;ice(x,w);add('cone',x+w+reach*0.55);x+=w+reach*0.55+28;break;}
+      case 'ice-pit':{const w=reach*0.8,g=reach*0.3,pw=reach*0.45;ice(x,w);pit(x+w+g,pw);x+=w+g+pw;break;}
+      case 'ice-fly':{const w=reach*1.3;ice(x,w);fly(x+reach*0.6);x+=w;break;}
+      case 'ice-long':{const w=reach*1.6;ice(x,w);x+=w;break;}
     }
     if(forced)break;
     x+=sp*react*(0.9+R()*0.4);
   }
-  return{def,obs:obs.sort((a,b)=>a.x-b.x),pits:pits.sort((a,b)=>a.a-b.a),items,flies,sticky,zaps,bolt:null,len:def.len};
+  return{def,obs:obs.sort((a,b)=>a.x-b.x),pits:pits.sort((a,b)=>a.a-b.a),items,flies,sticky,zaps,ices,bolt:null,len:def.len};
 }
 
 /* ---------- state ---------- */
@@ -321,11 +342,25 @@ function zapNow(){
   for(let i=0;i<8;i++)particles.push({x:PX+(Math.random()-0.5)*20,y:P.y-50,vx:(Math.random()-0.5)*0.8,vy:-1-Math.random(),g:-0.02,life:60,max:60,color:'rgba(90,90,90,.7)',r:4+Math.random()*3});
   die('zap');return true;
 }
-function hurt(){
+function onIce(wx){return S.ices.some(g=>wx>g.a+2&&wx<g.b-2);}
+function slip(){
+  if(god){godNote('빙판');return false;}
+  const g=S.ices.find(g=>dist+PX>g.a-10&&dist+PX<g.b+10);if(g)g.shown=frame;
+  hearts=0;shake=12;SFX.hit();P.vy=-6;P.slide=false;P.kickT=0;
+  burst(PX,GROUND-4,10,'rgba(220,240,255,.95)',2);
+  die('ice');return true;
+}
+function ironKick(f){
+  if(god){godNote('철판');f.broken=true;return false;}
+  f.broken=true;hearts=0;shake=16;SFX.clang();P.vy=-7;P.kickT=0;
+  burst(f.x-dist,f.y,10,'#ffe9a0',2.5);
+  die('ironkick');return true;
+}
+function hurt(cause){
   if(god){P.inv=40;godNote('충돌');return;}
   hearts=0;shake=14;SFX.hit();
   burst(PX,P.y-30,10,'#ffd2c4',2);
-  P.vy=-8;P.slide=false;P.kickT=0;die('hit');
+  P.vy=-8;P.slide=false;P.kickT=0;die(cause||'hit');
 }
 function pitFall(){
   if(god){const p=P.lastPit;if(p)dist=Math.max(dist,p.b-PX+30);P.y=GROUND-160;P.vy=0;P.jumps=1;P.lastPit=null;godNote('구덩이');return false;}
@@ -357,6 +392,8 @@ function updatePlay(){
   const wx=dist+PX;
 
   if(input.kick)doKick();
+  if(input.jp&&(P.onGround||P.coyote>0)&&onIce(wx)){if(slip())return;}
+  if(P.buffer>0&&!input.jp&&P.onGround&&onIce(wx)){P.buffer=0;if(slip())return;}
   if(input.jp){
     if(P.onGround||P.coyote>0)doJump1();
     else if(P.jumps<2)doJump2();
@@ -404,11 +441,11 @@ function updatePlay(){
     if(f.broken)continue;
     if(!f.active){if(f.x<=dist+VW+20)f.active=true;else continue;}
     f.x-=f.fs;
-    const target=P.slide?P.y-14:P.y-30;
-    f.y+=clamp((target-f.y)*0.1,-3.5,3.5);
+    const isIron=f.kind==='iron';
+    if(!isIron){const target=P.slide?P.y-14:P.y-30;f.y+=clamp((target-f.y)*0.1,-3.5,3.5);}
     const r={x:f.x-17,y:f.y-21,w:34,h:42};
-    if(kickZone&&inter(kickZone,r,0)){smashFly(f);continue;}
-    if(inter(hb,r,4)){f.broken=true;burst(f.x-dist,f.y,8,'#e2b47a',2);if(P.inv<=0){hurt();if(state!=='play')return;}}
+    if(kickZone&&inter(kickZone,r,0)){if(isIron){if(ironKick(f))return;continue;}smashFly(f);continue;}
+    if(inter(hb,r,4)){f.broken=true;burst(f.x-dist,f.y,8,isIron?'#c9d3dc':'#e2b47a',2);if(P.inv<=0){hurt(isIron?'iron':'hit');if(state!=='play')return;}}
   }
   S.flies=S.flies.filter(f=>!(f.x<dist-120));
 
@@ -637,6 +674,15 @@ function drawPlank(x,y,rot){
   for(let k=-9;k<=9;k+=9){ctx.moveTo(k,-18);ctx.quadraticCurveTo(k+3,0,k,18);}
   ctx.stroke();ctx.restore();
 }
+function drawIron(x,y,rot){
+  ctx.save();ctx.translate(x,y);ctx.rotate(rot);
+  ctx.fillStyle='#d9b88a';rr(-17,-21,34,42,3);ctx.fill();
+  ctx.fillStyle='rgba(120,135,150,.68)';rr(-17,-21,34,42,3);ctx.fill();
+  ctx.strokeStyle='#7d8a96';ctx.lineWidth=2;rr(-17,-21,34,42,3);ctx.stroke();
+  ctx.fillStyle='rgba(255,255,255,.35)';ctx.beginPath();ctx.moveTo(-12,-18);ctx.lineTo(-4,-18);ctx.lineTo(-14,10);ctx.lineTo(-14,-6);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#6f7b86';for(const p of [[-11,-15],[11,-15],[-11,15],[11,15]])circle(p[0],p[1],1.8);
+  ctx.restore();
+}
 function drawFlies(){
   for(const f of S.flies){
     if(f.broken)continue;
@@ -646,7 +692,7 @@ function drawFlies(){
     ctx.strokeStyle='rgba(255,255,255,.75)';ctx.lineWidth=3;ctx.lineCap='round';ctx.beginPath();
     for(let k=-1;k<=1;k++){ctx.moveTo(sx+24,f.y+k*12);ctx.lineTo(sx+46+Math.abs(k)*-8,f.y+k*12);}
     ctx.stroke();
-    drawPlank(sx,f.y,Math.sin(frame*0.3)*0.12);
+    if(f.kind==='iron')drawIron(sx,f.y,Math.sin(frame*0.2)*0.04);else drawPlank(sx,f.y,Math.sin(frame*0.3)*0.12);
   }
   for(const d of debris){ctx.save();ctx.globalAlpha=Math.min(1,d.life/20);ctx.translate(d.x,d.y);ctx.rotate(d.rot);ctx.fillStyle='#e2b47a';ctx.strokeStyle='#a8743f';ctx.lineWidth=2;rr(-17,-10,34,20,3);ctx.fill();ctx.stroke();ctx.restore();}
 }
@@ -807,9 +853,11 @@ function drawWorld(){
   ctx.save();
   if(shake>0)ctx.translate((Math.random()-0.5)*shake,(Math.random()-0.5)*shake*0.6);
   drawBackground(S.def.theme,dist);
+  if(S.def.snow){ctx.fillStyle='rgba(255,255,255,.8)';for(let i=0;i<45;i++){const sx=((hash(i,9)%(VW+40))-(frame*0.6+dist*0.15)*((i%3)+1)*0.5)%(VW+40);const x=(sx+VW+40)%(VW+40)-20,y=((hash(i,8)%VH)+frame*(0.8+(i%3)*0.4))%VH;circle(x,y,1.2+(i%3)*0.6);}}
   drawGround(S.def.theme);
   drawGoal();
   for(const z of S.zaps)drawZapHint(z);
+  for(const g of S.ices){const x=g.a-dist,w=g.b-g.a;if(x>VW+20||x+w<-20)continue;if(g.shown!=null){ctx.globalAlpha=Math.min(1,(frame-g.shown)/10);drawIce(x,w);ctx.globalAlpha=1;}else drawIceHint(x,w);}
   for(const g of S.sticky){const x=g.a-dist,w=g.b-g.a;if(x>VW+20||x+w<-20)continue;if(g.shown!=null){ctx.globalAlpha=Math.min(1,(frame-g.shown)/12);drawGoo(x,w);ctx.globalAlpha=1;}else drawGooHint(x,w);}
   for(const p of S.pits){if(!p.label)continue;const lx=(p.a+p.b)/2-dist;if(lx>-200&&lx<VW+200)bubble(p.label,lx,GROUND-160);}
   for(const o of S.obs){if(o.x-dist>VW+40)break;if(o.x+o.w-dist<-80)continue;drawObstacle(o);}
@@ -836,6 +884,23 @@ function drawWorld(){
   if(S.bolt&&S.bolt.t>20){ctx.fillStyle='rgba(255,255,240,'+((S.bolt.t-20)/12*0.85).toFixed(2)+')';ctx.fillRect(0,0,VW,VH);}
 }
 /* Hidden sticky floor: only a faint wet sheen and the odd glint until Songi gets caught. */
+/* Hidden ice: only a rare sparkle on the ground until Songi slips. */
+function drawIceHint(x,w){
+  const n=Math.max(2,Math.round(w/70));
+  for(let i=0;i<n;i++){
+    const period=60+(i*23)%40,cyc=(frame+i*37)%period;if(cyc>14)continue;
+    const sx=x+12+((i*131+Math.floor((frame+i*37)/period)*59)%Math.max(1,w-24)),sy=GROUND-3,a=1-Math.abs(cyc-7)/7,r=2+a*4;
+    ctx.strokeStyle='rgba(255,255,255,'+(0.9*a).toFixed(2)+')';ctx.lineWidth=1.4;ctx.beginPath();
+    ctx.moveTo(sx-r,sy);ctx.lineTo(sx+r,sy);ctx.moveTo(sx,sy-r);ctx.lineTo(sx,sy+r);ctx.stroke();
+  }
+}
+function drawIce(x,w){
+  ctx.fillStyle='rgba(190,230,255,.85)';rr(x,GROUND-3,w,10,4);ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=2;ctx.beginPath();
+  for(let k=10;k<w-20;k+=40){ctx.moveTo(x+k,GROUND);ctx.lineTo(x+k+18,GROUND);}ctx.stroke();
+  ctx.strokeStyle='rgba(120,180,220,.8)';ctx.lineWidth=1;ctx.beginPath();
+  for(let k=30;k<w-10;k+=55){ctx.moveTo(x+k,GROUND+5);ctx.lineTo(x+k+8,GROUND+1);ctx.lineTo(x+k+14,GROUND+4);}ctx.stroke();
+}
 function drawGooHint(x,w){
   // colorless: only small bubbles rising and popping from the floor, so it blends with every stage's ground
   const n=Math.max(2,Math.round(w/60));
@@ -932,14 +997,14 @@ function draw(){
       {h:34,draw:(x,y)=>drawBeltIcon(x,y,b[1],1.4)});
   }
   else if(state==='gameover'){
-    const T={hit:['꽈당!',null],pit:['풍덩!',null],sticky:['끈끈이에 붙었다!','끈끈이는 2단 점프로 멀리 넘어가요'],zap:['벼락 맞았다!','여기는 2단 점프 금지 구역!']}[deathCause];
+    const T={hit:['꽈당!',null],pit:['풍덩!',null],sticky:['끈끈이에 붙었다!','끈끈이는 2단 점프로 멀리 넘어가요'],zap:['벼락 맞았다!','여기는 2단 점프 금지 구역!'],ironkick:['발이 얼얼!','철판은 차지 말고 피하세요 (점프·슬라이드)'],iron:['철판에 맞았다!','철판은 높이를 따라오지 않아요'],ice:['미끄러져 꽈당!','빙판 위에서는 점프 금지!']}[deathCause];
     const L=[{t:T[0],size:38,color:'#ff9a7a'}];
     if(T[1])L.push({t:T[1],size:18,color:'#ffd27a'});
     L.push({t:'STAGE '+(stageIdx+1)+' · '+Math.floor(lastProg*100)+'% · 이 스테이지 '+tries+'번째 실패',size:19});
     L.push({t:(newBest?'최고 기록 갱신! · ':'')+'총 실패 '+totalDeaths+'회',size:16,color:newBest?'#9be38f':C_MUTED});    L.push({t:coarse?'탭하면 바로 다시':'Enter로 바로 다시',size:17,color:C_GOLD});
     panel(L);
   }
-  else if(state==='ending')panel([{t:'검은띠 실전 1부 완주!',size:34,color:C_GOLD},{t:'30개 스테이지 통과 · 총 실패 '+totalDeaths+'회',size:21},{t:coarse?'탭하면 타이틀로':'Enter로 타이틀로',size:16,color:C_MUTED}],
+  else if(state==='ending')panel([{t:'검은띠 실전 1부 완주!',size:34,color:C_GOLD},{t:'50개 스테이지 통과 · 총 실패 '+totalDeaths+'회',size:21},{t:coarse?'탭하면 타이틀로':'Enter로 타이틀로',size:16,color:C_MUTED}],
       {h:34,draw:(x,y)=>drawBeltIcon(x,y,BELTS[9][1],1.4)});
 }
 
@@ -1006,7 +1071,7 @@ document.getElementById('restart').addEventListener('click',()=>{audioInit();beg
 if(location.hash==='#test'){
   const bar=document.getElementById('testbar'),sel=document.getElementById('stageSel'),chk=document.getElementById('godChk');
   bar.hidden=false;
-  STAGES.forEach((d,i)=>{const o=document.createElement('option');o.value=i;o.textContent='STAGE '+(i+1)+' · '+d.name+(i>=20?' (벼락)':i>=10?' (끈끈이)':i>=5?' (송판)':'');sel.appendChild(o);});
+  STAGES.forEach((d,i)=>{const o=document.createElement('option');o.value=i;o.textContent='STAGE '+(i+1)+' · '+d.name+(i>=40?' (빙판)':i>=30?' (철판)':i>=20?' (벼락)':i>=10?' (끈끈이)':i>=5?' (송판)':'');sel.appendChild(o);});
   sel.value=String(unlocked);
   document.getElementById('stageGo').addEventListener('click',()=>{audioInit();beginAt(parseInt(sel.value,10));cv.focus({preventScroll:true});});
   chk.addEventListener('change',()=>{god=chk.checked;cv.focus({preventScroll:true});});
