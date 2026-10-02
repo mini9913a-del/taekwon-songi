@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="태권송이가 점프·슬라이드·발차기로 10개 스테이지를 달려 검은띠에 도전하는 러닝 게임">
+<meta name="description" content="태권송이가 점프·슬라이드·발차기로 30개 스테이지의 숨은 함정을 돌파하는 러닝 게임">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -40,6 +40,10 @@ button{font-family:var(--font-display);font-size:15px;color:var(--paper);backgro
 button:hover{border-color:var(--gold)}
 button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 @media (hover:none) and (pointer:coarse){.hint.keys{display:none}.hint.touch{display:flex}}
+.testbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;width:100%;padding:8px 10px;border:1px dashed var(--gold);border-radius:10px;font-family:var(--font-display);font-size:14px}
+.testbar .tag{color:var(--ink);background:var(--gold);border-radius:6px;padding:1px 8px}
+.testbar select{font-family:var(--font-display);font-size:15px;color:var(--paper);background:var(--ink-2);border:1px solid var(--line);border-radius:8px;padding:6px 8px;max-width:100%}
+.testbar .chk{display:flex;align-items:center;gap:4px;cursor:pointer}
 /* Phone held sideways: the game takes the whole screen */
 @media (orientation:landscape) and (max-height:540px) and (pointer:coarse){
   html,body{height:100%;overflow:hidden;overscroll-behavior:none}
@@ -57,7 +61,7 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 <div class="wrap">
   <header>
     <h1><span>태권송이</span>의 대모험</h1>
-    <p>한 번만 부딪혀도 끝! 10개 스테이지를 달려 검은띠에 도전하세요.</p>
+    <p>한 번만 부딪혀도 끝! 30개 스테이지, 숨은 함정을 외워서 돌파하세요.</p>
   </header>
   <div class="screen"><canvas id="game" tabindex="0" aria-label="태권송이의 대모험 게임 화면"></canvas></div>
   <div class="bar">
@@ -71,6 +75,13 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
       <span>탭 = 점프 · 공중에서 한 번 더 = 이단 점프</span>
       <span>아래로 쓸고 유지 = 슬라이드</span>
       <span>오른쪽으로 쓸기 = 발차기</span>
+    </div>
+    <div class="testbar" id="testbar" hidden>
+      <span class="tag">테스트 모드</span>
+      <label for="stageSel">스테이지</label>
+      <select id="stageSel"></select>
+      <button id="stageGo">시작</button>
+      <label class="chk"><input type="checkbox" id="godChk"> 무적</label>
     </div>
     <div class="actions">
       <button id="mute">소리 끄기</button>
@@ -126,7 +137,8 @@ const SFX={
   hit:()=>tone(300,70,0.35,'sawtooth',0.07),
   smash:()=>{tone(180,60,0.18,'square',0.1);setTimeout(()=>tone(1200,1600,0.08,'square',0.04),60);},
   warn:()=>tone(880,880,0.06,'square',0.03),
-  clear:()=>[523,659,784,1046,784,1046].forEach((f,i)=>setTimeout(()=>tone(f,f*1.01,0.15,'square',0.045),i*120)),
+  zap:()=>{tone(1800,80,0.5,'sawtooth',0.09);setTimeout(()=>tone(120,40,0.6,'square',0.1),60);},
+  clear:()=>[659,784,1046,784,1046].forEach((f,i)=>setTimeout(()=>tone(f,f*1.01,0.15,'square',0.045),i*120)),
   over:()=>[440,370,311,262].forEach((f,i)=>setTimeout(()=>tone(f,f*0.98,0.22,'triangle',0.08),i*180))
 };
 
@@ -158,19 +170,41 @@ const STAGES=[
   {name:'심사 가는 밤길',theme:'night',len:15000,speed:[8.2,9.5],react:[50,42],seed:20,fly:5,
    pats:{fly:1,'fly-fly':3,'cone-fly':3,'pit-fly':3,'fly-bar':3,'wide-pit':2,tall:2,'jump-slide':2,'slide-jump':2,'pit-slide':2,'double-bar':2,'pit-pit':2,'tall-bar':2,'cone-cone':1}}
 ];
+/* Stages 11+: black-belt 실전 (real fights). Every 10 stages a new trap joins the pool and stays:
+   11–20 sticky floor (landing = stuck, needs a longer double jump) · 21–30 + lightning (double jump inside a hidden zone = struck). */
+const BB_NAMES=['끈적한 공원','꿀 흘린 놀이터','찐득 강변','거미줄 다리','엿가락 골목','조청 공원','껌 붙은 놀이터','슬라임 강변','끈끈이 다리','끈끈이 심사',
+                '번쩍 공원','우르릉 놀이터','천둥 강변','벼락 다리','번개 골목','찌릿 공원','정전기 놀이터','폭풍 강변','낙뢰 다리','벼락 심사'];
+const BB_THEMES=['park','park','river','river','night'];
+const BASE_PATS={fly:1,'fly-fly':1,'cone-fly':1,'pit-fly':1,'fly-bar':1,'wide-pit':1,tall:1,'jump-slide':1,'slide-jump':1,'pit-slide':1,'double-bar':1,'pit-pit':1,'tall-bar':1};
+const TRAP_PATS=[
+  {sticky:2,'cone-sticky':4,'pit-sticky':3,'sticky-bar':2,'sticky-fly':2},
+  {'zap-pit':4,'zap-cones':3,'zap-fly':2,'zap-sticky':2}
+];
+const TRAP_INTRO=['이제부터 검은띠 실전 · 발밑을 조심하세요…','새 함정: 하늘을 조심하세요…'];
+const TRAP_FINAL=['cone-sticky','zap-pit'];
+for(let n=11;n<=30;n++){
+  const k=(n-1)%10,band=Math.floor((n-1)/10);
+  const sp0=Math.min(8.2,7.0+0.08*k+(band-1)*0.25);
+  const pats=Object.assign({},BASE_PATS);
+  for(let b=0;b<band;b++){const w=b===band-1?1.6:0.6;for(const key in TRAP_PATS[b])pats[key]=TRAP_PATS[b][key]*w*(b===band-1?1:1);}
+  STAGES.push({name:BB_NAMES[n-11],theme:BB_THEMES[(n-1)%5],len:k===9?15000:11000+k*400,speed:[sp0,Math.min(9.5,sp0+1.1)],
+    react:[56-k*0.6,46-k*0.4],seed:100+n,fly:4.4+0.06*k,pats,trapIntro:k===0?TRAP_INTRO[band-1]:null,finalTrap:TRAP_FINAL[band-1]});
+}
 const OBS={cone:{w:28,h:36},tall:{w:38,h:134},bar:{w:64}};
 const BALLOON=['#ff5d73','#ffb000','#3ec1d3','#7bd389','#a77bff','#ff8fd0','#ff7a3d','#4d96ff','#ffe156'];
 const AIR=2*-JUMP/GRAV;
 const speedAt=(def,x)=>def.speed[0]+(def.speed[1]-def.speed[0])*clamp(x/def.len,0,1);
 
 function genStage(i){
-  const def=STAGES[i],R=rng(def.seed),obs=[],pits=[],items=[],flies=[];
+  const def=STAGES[i],R=rng(def.seed),obs=[],pits=[],items=[],flies=[],sticky=[],zaps=[];
   const lbl=(touch,key)=>coarse?touch:key;
   const add=(t,x,label)=>{
     const o={t,x,w:OBS[t].w,h:OBS[t].h||0,label};
     if(t==='bar'){const base=Math.floor(Math.random()*BALLOON.length);o.colors=[];for(let k=0;k<18;k++)o.colors.push(BALLOON[(base+Math.floor(Math.random()*4)*2+k%3)%BALLOON.length]);}
     obs.push(o);return o;};
   const pit=(x,w,label)=>pits.push({a:x,b:x+w,label});
+  const goo=(x,w)=>sticky.push({a:x,b:x+w});
+  const zap=(a,b)=>zaps.push({a,b});
   const fly=(m,label)=>{const sp=speedAt(def,m),fs=def.fly||4;flies.push({m,x:m+VW+20-PX-sp*(VW+20-PX)/(sp+fs),y:GROUND-30,fs,active:false,broken:false,warned:false,label});};
   let x=800;
   if(def.tutorial){
@@ -188,9 +222,13 @@ function genStage(i){
   }
   const keys=Object.keys(def.pats),total=keys.reduce((s,k)=>s+def.pats[k],0);
   const pick=()=>{let r=R()*total;for(const k of keys){r-=def.pats[k];if(r<0)return k;}return keys[0];};
-  while(x<def.len-900){
+  const end=def.finalTrap?def.len*0.9:def.len-900;
+  let forced=null;
+  for(;;){
+    if(!forced&&x>=end){if(!def.finalTrap)break;forced=def.finalTrap;x=Math.max(x,def.len*0.93);}
     const u=x/def.len,sp=speedAt(def,x),reach=sp*AIR,react=def.react[0]+(def.react[1]-def.react[0])*u;
-    switch(pick()){
+    const kind=forced||pick();
+    switch(kind){
       case 'cone':add('cone',x);x+=28;break;
       case 'bar':add('bar',x);x+=64;break;
       case 'pit':{const w=reach*(0.4+R()*0.2);pit(x,w);x+=w;break;}
@@ -208,22 +246,35 @@ function genStage(i){
       case 'cone-fly':{const g=reach*0.5+sp*26;add('cone',x);fly(x+g);x+=g+40;break;}
       case 'pit-fly':{const w=reach*0.42,g=reach*0.4+sp*20;pit(x,w);fly(x+w+g);x+=w+g+40;break;}
       case 'fly-bar':{const g=sp*30;fly(x);add('bar',x+g);x+=g+64;break;}
+      // sticky floor: touching it on the ground = stuck
+      case 'sticky':{const w=reach*(0.55+R()*0.15);goo(x,w);x+=w;break;}
+      case 'cone-sticky':{add('cone',x);const a=x+28+reach*0.2,w=reach*0.72;goo(a,w);x=a+w;break;}
+      case 'pit-sticky':{const w=reach*0.45;pit(x,w);goo(x+w,reach*0.7);x+=w+reach*0.7;break;}
+      case 'sticky-bar':{const w=reach*0.6;goo(x,w);const g=reach*0.45+sp*18;add('bar',x+w+g);x+=w+g+64;break;}
+      case 'sticky-fly':{const w=reach*0.6;goo(x,w);fly(x+w+reach*0.4+sp*16);x+=w+reach*0.4+sp*16+40;break;}
+      // lightning: a double jump anywhere inside the (invisible) zone gets struck
+      case 'zap-pit':{const w=reach*(0.62+R()*0.1);pit(x,w);zap(x-reach*0.8,x+w+reach*0.3);x+=w;break;}
+      case 'zap-cones':{const g=reach*0.7;add('cone',x);add('cone',x+g);zap(x-reach*0.8,x+g+reach*0.3);x+=g+28;break;}
+      case 'zap-fly':{fly(x);fly(x+sp*40);zap(x-reach*0.8,x+sp*40+reach*0.3);x+=sp*40+40;break;}
+      case 'zap-sticky':{const w=reach*0.5;goo(x,w);zap(x-reach*0.8,x+w+reach*0.3);x+=w;break;}
     }
+    if(forced)break;
     x+=sp*react*(0.9+R()*0.4);
   }
-  return{def,obs:obs.sort((a,b)=>a.x-b.x),pits:pits.sort((a,b)=>a.a-b.a),items,flies,len:def.len};
+  return{def,obs:obs.sort((a,b)=>a.x-b.x),pits:pits.sort((a,b)=>a.a-b.a),items,flies,sticky,zaps,bolt:null,len:def.len};
 }
 
 /* ---------- state ---------- */
 let state='title',stateT=0,frame=0,stageIdx=0,S=null,dist=0,speed=0,slowT=0,shake=0;
-let hearts=3,newBest=false,lastProg=0,tries=1;
+let hearts=3,newBest=false,lastProg=0,tries=1,deathCause='hit',totalDeaths=0,pendingZap=0;
+try{totalDeaths=parseInt(localStorage.getItem('songi-deaths')||'0',10)||0;}catch(e){}
 let particles=[],floaters=[],debris=[];
 let best=0,unlocked=0;
 try{best=parseFloat(localStorage.getItem('songi-best-v3')||'0')||0;unlocked=parseInt(localStorage.getItem('songi-unlocked-v3')||'0',10)||0;}catch(e){best=0;unlocked=0;}
 unlocked=clamp(unlocked,0,STAGES.length-1);
-function recordText(v){if(v>=STAGES.length)return '검은띠 달성';const s=Math.floor(v);return 'STAGE '+(s+1)+' · '+Math.floor((v-s)*100)+'%';}
-function saveBest(v){newBest=false;if(v>best+0.0001){best=v;newBest=true;try{localStorage.setItem('songi-best-v3',String(best));}catch(e){}}}
-function saveUnlock(i){if(i>unlocked){unlocked=Math.min(i,STAGES.length-1);try{localStorage.setItem('songi-unlocked-v3',String(unlocked));}catch(e){}}}
+function recordText(v){if(v>=STAGES.length)return '전 스테이지 클리어';const s=Math.floor(v);return 'STAGE '+(s+1)+' · '+Math.floor((v-s)*100)+'%';}
+function saveBest(v){newBest=false;if(god)return;if(v>best+0.0001){best=v;newBest=true;try{localStorage.setItem('songi-best-v3',String(best));}catch(e){}}}
+function saveUnlock(i){if(god)return;if(i>unlocked){unlocked=Math.min(i,STAGES.length-1);try{localStorage.setItem('songi-unlocked-v3',String(unlocked));}catch(e){}}}
 
 const keys={down:false};
 const input={jp:false,go:false,pause:false,kick:false};
@@ -232,7 +283,7 @@ let P=null,lastJumpFrame=-99;
 
 function newPlayer(){return{y:GROUND,vy:0,onGround:true,jumps:0,coyote:0,buffer:0,slide:false,slideHold:0,spin:0,kickT:0,kickCd:0,inv:0,anim:0,lastPit:null};}
 function setState(s){state=s;stateT=0;}
-function startStage(i){stageIdx=i;S=genStage(i);dist=0;speed=S.def.speed[0];slowT=0;P=newPlayer();particles=[];floaters=[];debris=[];}
+function startStage(i){stageIdx=i;pendingZap=0;S=genStage(i);dist=0;speed=S.def.speed[0];slowT=0;P=newPlayer();particles=[];floaters=[];debris=[];}
 function beginAt(i){hearts=1;tries=1;startStage(i);setState('intro');}
 function retryStage(){hearts=1;tries++;startStage(stageIdx);setState('intro');}
 function nextStage(){
@@ -246,17 +297,40 @@ function burst(x,y,n,color,spd,grav){for(let i=0;i<n;i++){const a=Math.random()*
 function floatText(x,y,t,c){floaters.push({x,y,text:t,life:50,color:c||C_PAPER});}
 
 function doJump1(){P.vy=JUMP;P.jumps=1;P.onGround=false;P.coyote=0;P.buffer=0;P.slide=false;lastJumpFrame=frame;SFX.jump();}
-function doJump2(){P.vy=JUMP2;P.jumps=2;P.spin=26;lastJumpFrame=frame;SFX.jump2();burst(PX,P.y-20,6,'rgba(255,255,255,.9)',1.5,0);}
+function doJump2(){P.vy=JUMP2;P.jumps=2;P.spin=26;lastJumpFrame=frame;SFX.jump2();burst(PX,P.y-20,6,'rgba(255,255,255,.9)',1.5,0);
+  const wx=dist+PX;if(S.zaps.some(z=>wx>z.a&&wx<z.b))pendingZap=7;}
 function doKick(){if(P.kickCd>0)return;P.kickT=20;P.kickCd=24;P.slide=false;SFX.kick();}
 
+function die(cause){
+  deathCause=cause;totalDeaths++;try{localStorage.setItem('songi-deaths',String(totalDeaths));}catch(e){}
+  lastProg=stageProg();setState('down');SFX.over();
+}
+let god=false,godCd=0;
+// Test-mode invincibility: show what would have killed Songi, then keep running.
+function godNote(label){if(godCd<=0){floatText(dist+PX,P.y-80,label+' (무적)','#9be38f');godCd=40;shake=4;}}
+function stuck(){
+  if(god){godNote('끈끈이');return false;}
+  hearts=0;shake=8;SFX.hit();P.vy=0;P.y=GROUND;P.slide=false;P.kickT=0;
+  for(let i=0;i<10;i++)particles.push({x:PX+(Math.random()-0.5)*30,y:GROUND-2,vx:(Math.random()-0.5)*1.5,vy:-Math.random()*3,g:0.2,life:30,max:30,color:'#d9a520',r:2.5});
+  die('sticky');return true;
+}
+function zapNow(){
+  if(god){S.bolt={x:PX,t:32};SFX.zap();godNote('벼락');return false;}
+  hearts=0;shake=18;S.bolt={x:PX,t:32};SFX.zap();P.vy=-5;P.slide=false;P.kickT=0;P.spin=0;
+  burst(PX,P.y-30,16,'#fff36b',3);
+  for(let i=0;i<8;i++)particles.push({x:PX+(Math.random()-0.5)*20,y:P.y-50,vx:(Math.random()-0.5)*0.8,vy:-1-Math.random(),g:-0.02,life:60,max:60,color:'rgba(90,90,90,.7)',r:4+Math.random()*3});
+  die('zap');return true;
+}
 function hurt(){
+  if(god){P.inv=40;godNote('충돌');return;}
   hearts=0;shake=14;SFX.hit();
   burst(PX,P.y-30,10,'#ffd2c4',2);
-  P.vy=-8;P.slide=false;P.kickT=0;lastProg=stageProg();setState('down');SFX.over();
+  P.vy=-8;P.slide=false;P.kickT=0;die('hit');
 }
 function pitFall(){
+  if(god){const p=P.lastPit;if(p)dist=Math.max(dist,p.b-PX+30);P.y=GROUND-160;P.vy=0;P.jumps=1;P.lastPit=null;godNote('구덩이');return false;}
   hearts=0;shake=10;SFX.hit();
-  P.y=VH+80;P.vy=0;lastProg=stageProg();setState('down');SFX.over();
+  P.y=VH+80;P.vy=0;die('pit');return true;
 }
 
 function hitbox(){const wx=dist+PX;return P.slide?{x:wx-20,y:P.y-26,w:40,h:26}:{x:wx-13,y:P.y-50,w:26,h:50};}
@@ -311,8 +385,11 @@ function updatePlay(){
   if(P.kickT>0)P.kickT--;
   if(P.kickCd>0)P.kickCd--;
   if(P.inv>0)P.inv--;
+  if(godCd>0)godCd--;
   P.anim+=speed*0.075;
-  if(P.y>VH+60){pitFall();return;}
+  if(P.y>VH+60){if(pitFall())return;}
+  if(pendingZap>0){if(P.jumps<2)pendingZap=0;else if(--pendingZap===0){if(zapNow())return;}}
+  if(P.onGround){const g=S.sticky.find(g=>wx>g.a+4&&wx<g.b-4);if(g){g.shown=frame;if(stuck())return;}}
 
   const hb=hitbox();
   for(const o of S.obs){
@@ -352,6 +429,7 @@ function updateFx(){
   for(const f of floaters){f.y-=0.7;f.life--;}
   floaters=floaters.filter(f=>f.life>0);
   if(shake>0)shake--;
+  if(S&&S.bolt&&S.bolt.t>0)S.bolt.t--;
 }
 
 function step(){
@@ -362,11 +440,11 @@ function step(){
     case 'intro':P.anim+=0.3;if(stateT>(tries>1?60:(S.def.flyTutorial?150:110)))setState('play');break;
     case 'play':updatePlay();break;
     case 'pause':if(input.go||input.jp)setState('play');break;
-    case 'down':P.vy+=0.5;P.y=Math.min(P.y+P.vy,GROUND);if(P.y>=GROUND)P.vy=0;if(stateT>70){saveBest(stageIdx+lastProg);setState('gameover');}break;
+    case 'down':if(deathCause!=='sticky'){P.vy+=0.5;P.y=Math.min(P.y+P.vy,GROUND);if(P.y>=GROUND)P.vy=0;}if(stateT>(deathCause==='zap'?80:60)){saveBest(stageIdx+lastProg);setState('gameover');}break;
     case 'clear':{const s=Math.max(0,speed*(1-stateT/50));dist+=s;P.anim+=s*0.075;P.kickT=0;
       if(P.y<GROUND||P.vy<0){P.vy+=GRAV;P.y=Math.min(GROUND,P.y+P.vy);if(P.y>=GROUND)P.vy=0;}
       if(stateT>190)nextStage();break;}
-    case 'gameover':if(stateT>50&&(input.jp||input.go))retryStage();break;
+    case 'gameover':if(stateT>25&&(input.jp||input.go))retryStage();break;
     case 'ending':if(stateT>50&&(input.jp||input.go))setState('title');break;
   }
   updateFx();
@@ -491,7 +569,7 @@ function drawSongi(x,y,pose,t,scale,spinRot){
   ctx.restore();
 }
 function songiPose(){
-  if(state==='down'||state==='gameover')return P.y<GROUND?'hurt':'down';
+  if(state==='down'||state==='gameover'){if(deathCause==='sticky')return 'hurt';return P.y<GROUND?'hurt':'down';}
   if(state==='clear')return stateT>45?'win':'run';
   if(state==='intro')return 'run';
   if(P.inv>60&&state==='play')return 'hurt';
@@ -579,7 +657,7 @@ function drawGoal(){
   ctx.fillStyle=C_GOLD;circle(gx,GROUND-176,7);circle(gx+120,GROUND-176,7);
   ctx.fillStyle=C_RED;rr(gx-14,GROUND-172,148,40,8);ctx.fill();
   ctx.strokeStyle='#9e2f2a';ctx.lineWidth=2;ctx.stroke();
-  text(stageIdx===STAGES.length-1?'심사 통과!':'도착!',gx+60,GROUND-152,22,'#fff3e6','center',false);
+  text(stageIdx%10===9?'심사 통과!':'도착!',gx+60,GROUND-152,22,'#fff3e6','center',false);
 }
 
 function hills(c,f,base,amp,k,color){
@@ -715,7 +793,7 @@ function drawBeltIcon(x,y,color,s){
 }
 function drawHUD(){
   ctx.fillStyle='rgba(31,26,36,.42)';rr(10,8,VW-20,44,12);ctx.fill();
-  drawBeltIcon(36,28,BELTS[stageIdx][1],0.85);
+  drawBeltIcon(36,28,BELTS[Math.min(stageIdx,9)][1],0.85);
   text('STAGE '+(stageIdx+1)+' · '+S.def.name,58,30,18,C_PAPER,'left');
   if(tries>1)text(tries+'번째 도전',58+ctx.measureText('STAGE '+(stageIdx+1)+' · '+S.def.name).width+14,30,15,C_MUTED,'left');
   const bx=VW-380,bw=290,prog=stageProg();
@@ -731,6 +809,8 @@ function drawWorld(){
   drawBackground(S.def.theme,dist);
   drawGround(S.def.theme);
   drawGoal();
+  for(const z of S.zaps)drawZapHint(z);
+  for(const g of S.sticky){const x=g.a-dist,w=g.b-g.a;if(x>VW+20||x+w<-20)continue;if(g.shown!=null){ctx.globalAlpha=Math.min(1,(frame-g.shown)/12);drawGoo(x,w);ctx.globalAlpha=1;}else drawGooHint(x,w);}
   for(const p of S.pits){if(!p.label)continue;const lx=(p.a+p.b)/2-dist;if(lx>-200&&lx<VW+200)bubble(p.label,lx,GROUND-160);}
   for(const o of S.obs){if(o.x-dist>VW+40)break;if(o.x+o.w-dist<-80)continue;drawObstacle(o);}
   for(const it of S.items){if(it.got)continue;const x=it.x-dist;if(x>-30&&x<VW+30)drawMilk(x,it.y+Math.sin(frame*0.06)*4);}
@@ -739,8 +819,13 @@ function drawWorld(){
     if(P.onGround&&P.y>=GROUND){ctx.fillStyle='rgba(0,0,0,.18)';ell(PX,GROUND+2,P.slide?24:16,4);}
     const pose=songiPose();
     const spin=pose==='tuck'?(1-P.spin/26)*Math.PI*2:0;
+    const charred=(state==='down'||state==='gameover')&&deathCause==='zap';
+    if(charred&&'filter' in ctx)ctx.filter='brightness(0.4) saturate(0.4)';
     drawSongi(PX,P.y,pose,P.anim,1.08,spin);
+    if(charred)ctx.filter='none';
+    if((state==='down'||state==='gameover')&&deathCause==='sticky'){ctx.fillStyle='rgba(217,165,32,.85)';ell(PX-4,GROUND-3,20,5);ell(PX+6,GROUND-8,5,6);}
   }
+  if(S.bolt&&S.bolt.t>0)drawBolt(S.bolt);
   drawFlies();
   for(const q of particles){ctx.globalAlpha=Math.max(0,q.life/q.max);ctx.fillStyle=q.color;circle(q.x,q.y,q.r);}
   ctx.globalAlpha=1;
@@ -748,6 +833,48 @@ function drawWorld(){
   ctx.globalAlpha=1;
   ctx.restore();
   drawHUD();
+  if(S.bolt&&S.bolt.t>20){ctx.fillStyle='rgba(255,255,240,'+((S.bolt.t-20)/12*0.85).toFixed(2)+')';ctx.fillRect(0,0,VW,VH);}
+}
+/* Hidden sticky floor: only a faint wet sheen and the odd glint until Songi gets caught. */
+function drawGooHint(x,w){
+  // amber wet strip + glints + an occasional popping bubble: readable if you look, easy to miss if you don't
+  ctx.fillStyle='rgba(217,165,32,.52)';
+  ctx.beginPath();ctx.moveTo(x+4,GROUND+5);
+  for(let k=4;k<=w-4;k+=16)ctx.lineTo(x+k,GROUND-1.5+Math.sin(k*0.7)*1.2);
+  ctx.lineTo(x+w-4,GROUND+5);ctx.closePath();ctx.fill();
+  for(let k=14;k<w-8;k+=28){const a=Math.max(0,Math.sin(frame*0.09+k*0.37)-0.35)*1.3;if(a>0){ctx.fillStyle='rgba(255,246,200,'+Math.min(1,a).toFixed(2)+')';circle(x+k,GROUND,1.9);}}
+  const cyc=(frame+Math.floor(x+dist))%70;
+  if(cyc<24){const bx=x+12+((Math.floor((frame+x+dist)/70)*53)%Math.max(1,w-24)),r=1.5+cyc*0.18;
+    ctx.strokeStyle='rgba(240,200,80,'+(cyc<20?0.85:0.3).toFixed(2)+')';ctx.lineWidth=1.4;ctx.beginPath();ctx.arc(bx,GROUND-2-r,r,0,Math.PI*2);ctx.stroke();}
+}
+function drawZapHint(z){
+  // faint static in the sky above a no-double-jump zone
+  const a=z.a-dist,b=z.b-dist;if(b<-40||a>VW+40)return;
+  const t=(frame+Math.floor(z.a))%80;
+  ctx.fillStyle='rgba(80,80,110,.12)';
+  for(let x=a+20;x<b-20;x+=60){ell(x,64+Math.sin(x*0.05)*6,34,9);}
+  if(t<6){const sx=a+((Math.floor((frame+z.a)/80)*97)%Math.max(1,b-a));
+    ctx.strokeStyle='rgba(255,230,80,.9)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(sx,52);ctx.lineTo(sx+6,64);ctx.lineTo(sx,70);ctx.lineTo(sx+7,82);ctx.stroke();}
+}
+function drawGoo(x,w){
+  ctx.fillStyle='rgba(217,165,32,.88)';
+  ctx.beginPath();ctx.moveTo(x,GROUND+2);ctx.quadraticCurveTo(x+4,GROUND-7,x+12,GROUND-6);
+  for(let k=12;k<w-12;k+=24)ctx.quadraticCurveTo(x+k+12,GROUND-10,x+k+24,GROUND-6);
+  ctx.quadraticCurveTo(x+w-4,GROUND-7,x+w,GROUND+2);ctx.closePath();ctx.fill();
+  ctx.fillRect(x,GROUND,w,7);
+  for(let k=10;k<w-6;k+=30){ctx.beginPath();ctx.moveTo(x+k,GROUND+6);ctx.quadraticCurveTo(x+k+3,GROUND+16+((k*7)%9),x+k+6,GROUND+6);ctx.fill();}
+  ctx.fillStyle='rgba(255,236,170,.75)';
+  for(let k=16;k<w-10;k+=34){ell(x+k,GROUND-5,5,1.8);circle(x+k+12,GROUND-2+Math.sin(frame*0.08+k)*1,1.8);}
+}
+function drawBolt(b){
+  const pts=[];let y=0,x=b.x+30;
+  const seed=Math.floor(b.t/3);
+  while(y<P.y-40){pts.push([x,y]);y+=26;x=b.x+((hash(y,seed)%30)-15)*(1-y/(P.y));}
+  pts.push([b.x,P.y-40]);
+  ctx.lineJoin='round';ctx.lineCap='round';
+  for(const pass of [['rgba(255,236,110,.55)',14],['#ffe94a',6],['#ffffff',2.5]]){
+    ctx.strokeStyle=pass[0];ctx.lineWidth=pass[1];ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.stroke();
+  }
 }
 
 function panel(lines,extra){
@@ -764,7 +891,7 @@ function drawTitle(){
   const sd=dist;dist=c;
   ctx.save();ctx.beginPath();ctx.rect(0,GROUND,VW,VH-GROUND);ctx.clip();groundFill('park',0,VW);ctx.restore();
   dist=sd;
-  beltColor=BELTS[unlocked][1];
+  beltColor=BELTS[Math.min(unlocked,9)][1];
   ctx.fillStyle='rgba(0,0,0,.18)';ell(240,GROUND+2,20,5);
   drawSongi(240,GROUND,'run',frame*0.42,2.1);
   outlined('태권송이의 대모험',VW/2,96,62,C_PAPER,C_INK,10);
@@ -780,24 +907,36 @@ function drawTitle(){
 function draw(){
   ctx.clearRect(0,0,VW,VH);
   if(state==='title'){drawTitle();return;}
-  beltColor=BELTS[Math.min(BELTS.length-1,(state==='clear'&&stateT>60)?stageIdx+1:stageIdx)][1];
+  beltColor=BELTS[Math.min(9,(state==='clear'&&stateT>60)?stageIdx+1:stageIdx)][1];
   drawWorld();
   if(state==='intro'){
     ctx.fillStyle='rgba(31,26,36,.55)';ctx.fillRect(0,0,VW,VH);
     text('STAGE '+(stageIdx+1),VW/2,150,46,C_GOLD,'center');
     text(S.def.name,VW/2,202,32,C_PAPER,'center');
-    drawBeltIcon(VW/2-40,248,BELTS[stageIdx][1],1);text(BELTS[stageIdx][0]+' 도전',VW/2-16,248,20,C_PAPER,'left');
-    if(S.def.flyTutorial)text(coarse?'새 장애물! 날아오는 송판은 오른쪽으로 쓸어 발차기':'새 장애물! 날아오는 송판은 → 발차기로 격파',VW/2,296,20,'#ffd27a','center');
+    const bi=Math.min(stageIdx,9),bt=stageIdx>=10?'검은띠 실전 '+(stageIdx-9):BELTS[bi][0]+' 도전';
+    ctx.font='20px '+FONT;const bw2=ctx.measureText(bt).width;
+    drawBeltIcon(VW/2-bw2/2-22,248,BELTS[bi][1],1);text(bt,VW/2-bw2/2+2,248,20,C_PAPER,'left');
+    if(S.def.trapIntro)text(S.def.trapIntro,VW/2,296,22,'#ffd27a','center');
+    else if(stageIdx===10)text('이제부터 검은띠 실전!',VW/2,296,22,'#ffd27a','center');
+    else if(S.def.flyTutorial)text(coarse?'새 장애물! 날아오는 송판은 오른쪽으로 쓸어 발차기':'새 장애물! 날아오는 송판은 → 발차기로 격파',VW/2,296,20,'#ffd27a','center');
     else text(stateT<70?'준비…':'시작!',VW/2,296,26,stateT<70?C_MUTED:C_GOLD,'center');
   }
   else if(state==='pause')panel([{t:'일시정지',size:34,color:C_GOLD},{t:coarse?'화면을 탭하면 계속':'P 또는 Enter로 계속',size:18,color:C_MUTED}]);
   else if(state==='clear'&&stateT>60){
-    const last=stageIdx===STAGES.length-1,b=last?BELTS[BELTS.length-1]:BELTS[stageIdx+1];
-    panel([{t:last?'검은띠 최종 심사 통과!':b[0]+' 승급!',size:last?32:36,color:C_GOLD},{t:'STAGE '+(stageIdx+1)+' 클리어 · '+(tries===1?'한 번에 성공':tries+'번째 도전에 성공'),size:19},{t:STAGES[stageIdx+1]?'다음 · '+STAGES[stageIdx+1].name+(stageIdx+1===5?' (새 장애물 등장)':''):'',size:16,color:C_MUTED}],
+    const promo=stageIdx<9,b=promo?BELTS[stageIdx+1]:BELTS[9];
+    const head=promo?b[0]+' 승급!':stageIdx===9?'검은띠 최종 심사 통과!':'검은띠 실전 '+(stageIdx-9)+' 통과!';
+    panel([{t:head,size:promo?36:32,color:C_GOLD},{t:'STAGE '+(stageIdx+1)+' 클리어 · '+(tries===1?'한 번에 성공':tries+'번째 도전에 성공'),size:19},{t:STAGES[stageIdx+1]?'다음 · '+STAGES[stageIdx+1].name+(stageIdx+1===5?' (새 장애물 등장)':''):'',size:16,color:C_MUTED}],
       {h:34,draw:(x,y)=>drawBeltIcon(x,y,b[1],1.4)});
   }
-  else if(state==='gameover')panel([{t:'아쉬워요!',size:36,color:'#ff9a7a'},{t:'STAGE '+(stageIdx+1)+' · '+Math.floor(lastProg*100)+'% 지점까지 달렸어요',size:20},{t:newBest?'최고 기록 갱신!':'최고 기록 '+recordText(best),size:17,color:newBest?'#9be38f':C_MUTED},{t:coarse?'탭하면 이 스테이지 다시 도전':'Enter로 이 스테이지 다시 도전',size:17,color:C_GOLD}]);
-  else if(state==='ending')panel([{t:'태권송이 검은띠 마스터!',size:34,color:C_GOLD},{t:'10개 스테이지를 모두 통과했어요',size:21},{t:coarse?'탭하면 타이틀로':'Enter로 타이틀로',size:16,color:C_MUTED}],
+  else if(state==='gameover'){
+    const T={hit:['꽈당!',null],pit:['풍덩!',null],sticky:['끈끈이에 붙었다!','끈끈이는 2단 점프로 멀리 넘어가요'],zap:['벼락 맞았다!','여기는 2단 점프 금지 구역!']}[deathCause];
+    const L=[{t:T[0],size:38,color:'#ff9a7a'}];
+    if(T[1])L.push({t:T[1],size:18,color:'#ffd27a'});
+    L.push({t:'STAGE '+(stageIdx+1)+' · '+Math.floor(lastProg*100)+'% · 이 스테이지 '+tries+'번째 실패',size:19});
+    L.push({t:(newBest?'최고 기록 갱신! · ':'')+'총 실패 '+totalDeaths+'회',size:16,color:newBest?'#9be38f':C_MUTED});    L.push({t:coarse?'탭하면 바로 다시':'Enter로 바로 다시',size:17,color:C_GOLD});
+    panel(L);
+  }
+  else if(state==='ending')panel([{t:'검은띠 실전 1부 완주!',size:34,color:C_GOLD},{t:'30개 스테이지 통과 · 총 실패 '+totalDeaths+'회',size:21},{t:coarse?'탭하면 타이틀로':'Enter로 타이틀로',size:16,color:C_MUTED}],
       {h:34,draw:(x,y)=>drawBeltIcon(x,y,BELTS[9][1],1.4)});
 }
 
@@ -860,6 +999,18 @@ cv.addEventListener('contextmenu',e=>e.preventDefault());
 const muteBtn=document.getElementById('mute');
 muteBtn.addEventListener('click',()=>{muted=!muted;muteBtn.textContent=muted?'소리 켜기':'소리 끄기';cv.focus({preventScroll:true});});
 document.getElementById('restart').addEventListener('click',()=>{audioInit();beginAt(0);cv.focus({preventScroll:true});});
+// Test mode: open the page with #test at the end of the address.
+if(location.hash==='#test'){
+  const bar=document.getElementById('testbar'),sel=document.getElementById('stageSel'),chk=document.getElementById('godChk');
+  bar.hidden=false;
+  STAGES.forEach((d,i)=>{const o=document.createElement('option');o.value=i;o.textContent='STAGE '+(i+1)+' · '+d.name+(i>=20?' (벼락)':i>=10?' (끈끈이)':i>=5?' (송판)':'');sel.appendChild(o);});
+  sel.value=String(unlocked);
+  document.getElementById('stageGo').addEventListener('click',()=>{audioInit();beginAt(parseInt(sel.value,10));cv.focus({preventScroll:true});});
+  chk.addEventListener('change',()=>{god=chk.checked;cv.focus({preventScroll:true});});
+  window.addEventListener('keydown',e=>{
+    if(e.code==='BracketRight'||e.code==='BracketLeft'){const n=clamp(stageIdx+(e.code==='BracketRight'?1:-1),0,STAGES.length-1);sel.value=String(n);beginAt(n);}
+  });
+}
 })();
 </script>
 </body>
