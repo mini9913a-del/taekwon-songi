@@ -3,12 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="태권송이가 점프·슬라이드·발차기로 50개 스테이지의 숨은 함정을 돌파하는 러닝 게임">
+<meta name="description" content="한 번만 부딪혀도 끝! 숨은 함정을 외워서 돌파하는 태권도 러닝 게임">
+<meta name="theme-color" content="#1f1a24">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="태권송이">
-<meta name="theme-color" content="#1f1a24">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <title>태권송이의 대모험</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -44,17 +47,19 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .testbar .tag{color:var(--ink);background:var(--gold);border-radius:6px;padding:1px 8px}
 .testbar select{font-family:var(--font-display);font-size:15px;color:var(--paper);background:var(--ink-2);border:1px solid var(--line);border-radius:8px;padding:6px 8px;max-width:100%}
 .testbar .chk{display:flex;align-items:center;gap:4px;cursor:pointer}
-/* Phone held sideways: the game takes the whole screen */
-@media (orientation:landscape) and (max-height:540px) and (pointer:coarse){
-  html,body{height:100%;overflow:hidden;overscroll-behavior:none}
-  body{padding:0}
-  header,.bar{display:none}
-  .wrap{max-width:none;margin:0;gap:0}
-  .screen{position:fixed;inset:0;width:100vw;max-width:none;height:100vh;height:100dvh;aspect-ratio:auto;border-radius:0;box-shadow:none;
-    padding:0 env(safe-area-inset-right,0px) 0 env(safe-area-inset-left,0px);box-sizing:border-box}
-}
+/* Full-screen mode (class set by script): installed app, or a phone held sideways — only the game, no frame */
+html.full,html.full body{height:100%;overflow:hidden;overscroll-behavior:none;background:#000}
+html.full body{padding:0}
+html.full header,html.full .bar{display:none}
+html.full .wrap{max-width:none;margin:0;gap:0}
+html.full .screen{position:fixed;inset:0;width:100vw;max-width:none;height:100vh;height:100dvh;aspect-ratio:auto;border-radius:0;box-shadow:none;background:#000;
+  display:flex;align-items:center;justify-content:center;
+  padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px);box-sizing:border-box}
+html.full canvas{flex:none}
+.rotate-hint{display:none}
+@media (orientation:portrait){html.full .rotate-hint{display:block;position:fixed;left:0;right:0;bottom:calc(24px + env(safe-area-inset-bottom,0px));text-align:center;color:var(--muted);font-family:var(--font-display);font-size:15px}}
 </style>
-<style>html{-webkit-text-size-adjust:100%}*{box-sizing:border-box}body{margin:0}</style>
+<style>html{-webkit-text-size-adjust:100%}*{box-sizing:border-box}body{margin:0}[hidden]{display:none!important}.pwa-hint{color:var(--muted);font-size:13px;width:100%}</style>
 </head>
 <body>
 
@@ -63,7 +68,7 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
     <h1><span>태권송이</span>의 대모험</h1>
     <p>한 번만 부딪혀도 끝! 50개 스테이지, 숨은 함정을 외워서 돌파하세요.</p>
   </header>
-  <div class="screen"><canvas id="game" tabindex="0" aria-label="태권송이의 대모험 게임 화면"></canvas></div>
+  <div class="screen"><canvas id="game" tabindex="0" aria-label="태권송이의 대모험 게임 화면"></canvas><div class="rotate-hint">폰을 가로로 돌리면 화면이 꽉 차요</div></div>
   <div class="bar">
     <div class="hint keys">
       <span><kbd>Space</kbd> 점프 · 공중에서 한 번 더 = 이단 점프</span>
@@ -102,13 +107,30 @@ const cv=document.getElementById('game');
 const ctx=cv.getContext('2d');
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 // The view is always 480 units tall; width follows the screen shape (wider phones see further ahead).
+// Full-screen when installed as an app, or on a phone held sideways.
+const mqLand=window.matchMedia('(orientation:landscape) and (max-height:540px) and (pointer:coarse)');
+const mqApp=window.matchMedia('(display-mode: fullscreen), (display-mode: standalone)');
+function isFull(){return mqLand.matches||mqApp.matches||window.navigator.standalone===true;}
 function fit(){
-  const d=Math.min(window.devicePixelRatio||1,2),r=cv.getBoundingClientRect();
-  const asp=r.width>0&&r.height>0?r.width/r.height:5/3;
-  VW=Math.round(clamp(VH*asp,800,1100));
+  const full=isFull();
+  document.documentElement.classList.toggle('full',full);
+  const d=Math.min(window.devicePixelRatio||1,2);
+  if(full){
+    // fill the screen; wide screens see further ahead (up to 1100 units), anything else is letterboxed, never stretched
+    const box=cv.parentElement.getBoundingClientRect(),cs=getComputedStyle(cv.parentElement);
+    const W=box.width-parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight),H=box.height-parseFloat(cs.paddingTop)-parseFloat(cs.paddingBottom);
+    VW=Math.round(clamp(VH*(W/H),800,1100));
+    const cw=Math.min(W,H*VW/VH);
+    cv.style.width=cw+'px';cv.style.height=(cw*VH/VW)+'px';
+  }else{
+    cv.style.width='';cv.style.height='';
+    const r=cv.getBoundingClientRect();
+    VW=Math.round(clamp(VH*(r.width>0&&r.height>0?r.width/r.height:5/3),800,1100));
+  }
   cv.width=Math.round(VW*d);cv.height=Math.round(VH*d);ctx.setTransform(d,0,0,d,0,0);
 }
 fit();
+[mqLand,mqApp].forEach(m=>{try{m.addEventListener('change',fit);}catch(e){m.addListener(fit);}});
 window.addEventListener('resize',()=>requestAnimationFrame(fit));
 window.addEventListener('orientationchange',()=>setTimeout(fit,250));
 const coarse=!!(window.matchMedia&&window.matchMedia('(pointer:coarse)').matches);
@@ -1088,6 +1110,22 @@ if(location.hash==='#test'){
     if(e.code==='BracketRight'||e.code==='BracketLeft'){const n=clamp(stageIdx+(e.code==='BracketRight'?1:-1),0,STAGES.length-1);sel.value=String(n);beginAt(n);}
   });
 }
+})();
+</script>
+<script>
+// App install (PWA): offline cache, Android "앱 설치" button, iPhone home-screen hint.
+(function(){
+  if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}
+  var acts=document.querySelector('.actions'),bar=document.querySelector('.bar');
+  var ib=document.createElement('button');ib.id='installBtn';ib.textContent='앱 설치';ib.hidden=true;acts.insertBefore(ib,acts.firstChild);
+  var deferred=null;
+  window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();deferred=e;ib.hidden=false;});
+  ib.addEventListener('click',function(){if(!deferred)return;deferred.prompt();deferred.userChoice.finally(function(){deferred=null;ib.hidden=true;});});
+  window.addEventListener('appinstalled',function(){ib.hidden=true;});
+  var standalone=window.navigator.standalone||window.matchMedia('(display-mode: standalone),(display-mode: fullscreen)').matches;
+  if(/iphone|ipad|ipod/i.test(navigator.userAgent)&&!standalone){
+    var h=document.createElement('div');h.className='pwa-hint';h.textContent='앱으로 설치: 사파리 공유 버튼 → "홈 화면에 추가"';bar.appendChild(h);
+  }
 })();
 </script>
 </body>
