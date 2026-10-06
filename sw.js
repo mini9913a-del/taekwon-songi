@@ -1,5 +1,5 @@
 // 태권송이 offline cache. Bump VERSION when you upload a new index.html to force a refresh.
-const VERSION = 'songi-v9';
+const VERSION = 'songi-v10';
 const CORE = ['./', './index.html', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './icons/favicon-32.png'];
 
