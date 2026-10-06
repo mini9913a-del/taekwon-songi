@@ -229,14 +229,14 @@ const TRAP_PATS=[
   {'pot':3,'pot-pot':2,'cone-pot':2,'pot-cone':2,'pot-fly':2,'ice-pot':2},
   // 61–70 pigeons: run straight through them; jumping over makes them fly up into Songi's face
   {'pigeon':3,'cone-pigeon':3,'pigeon-pot':2,'pigeon-fly':2,'pigeon-bar':2},
-  // 71–80 delivery motorbike from behind: tall stacked boxes — only a double jump clears it
+  // 71–80 delivery motorbike coming head-on: tall stacked boxes — only a double jump clears it
   {'moto':3,'moto-pot':2,'moto-cone':2,'moto-fly':2},
   // 81–90 "차렷!": for one second any input fails; decoy cones roll past
   {'attn':3,'attn-cone':3,'attn-pot':2},
   // 91–100 blackout: no new pattern, everything so far in the dark
   {}
 ];
-const TRAP_INTRO=['이제부터 검은띠 실전 · 발밑을 조심하세요…','새 함정: 하늘을 조심하세요…','새 함정: 날아오는 게 전부 송판은 아니에요…','새 함정: 발밑이 미끄러워요…','새 함정: 떨어지는 화분 · {BACK}','새 함정: 길 위의 비둘기…','새 함정: 뒤에서 무언가 다가와요…','새 함정: 사범님이 지켜보고 있어요…','정전! 송이 주변만 보여요…'];
+const TRAP_INTRO=['이제부터 검은띠 실전 · 발밑을 조심하세요…','새 함정: 하늘을 조심하세요…','새 함정: 날아오는 게 전부 송판은 아니에요…','새 함정: 발밑이 미끄러워요…','새 함정: 떨어지는 화분 · {BACK}','새 함정: 길 위의 비둘기…','새 함정: 마주 오는 오토바이 · 짐이 높으면 2단 점프!','새 함정: 사범님이 지켜보고 있어요…','정전! 송이 주변만 보여요…'];
 const TRAP_FINAL=['cone-sticky','zap-pit','fly-iron','ice-cone','pot-fly','cone-pigeon','moto-pot','attn-cone','moto-pot'];
 for(let n=11;n<=100;n++){
   const k=(n-1)%10,band=Math.floor((n-1)/10);
@@ -244,7 +244,7 @@ for(let n=11;n<=100;n++){
   const pats=Object.assign({},BASE_PATS);
   for(let b=0;b<band;b++){const w=b===band-1?1.6:0.6;for(const key in TRAP_PATS[b])pats[key]=TRAP_PATS[b][key]*w*(b===band-1?1:1);}
   STAGES.push({name:BB_NAMES[n-11],theme:BB_THEMES[(n-1)%5],len:k===9?15000:11000+k*400,speed:[sp0,Math.min(9.5,sp0+1.1)],
-    react:[56-k*0.6,46-k*0.4],seed:100+n,fly:4.4+0.06*k,pats,trapIntro:k===0?TRAP_INTRO[band-1]:null,finalTrap:TRAP_FINAL[band-1],snow:band===4,potTutorial:band===5&&k===0,dark:band===9,fakeGoal:k===9&&band>=6&&band<=8,finale:n===100});
+    react:[56-k*0.6,46-k*0.4],seed:100+n,fly:4.4+0.06*k,pats,trapIntro:k===0?TRAP_INTRO[band-1]:null,finalTrap:TRAP_FINAL[band-1],snow:band===4,potTutorial:band===5&&k===0,dark:band===9,motoTutorial:band===7&&k===0,fakeGoal:k===9&&band>=6&&band<=8,finale:n===100});
 }
 const OBS={cone:{w:28,h:36},tall:{w:38,h:134},bar:{w:64}};
 const BALLOON=['#ff5d73','#ffb000','#3ec1d3','#7bd389','#a77bff','#ff8fd0','#ff7a3d','#4d96ff','#ffe156'];
@@ -264,7 +264,7 @@ function genStage(i){
   const ice=(x,w)=>ices.push({a:x,b:x+w});
   const pot=(m,label)=>pots.push({m,T:46,t:-1,y:-40,done:false,label});
   const pig=(x,w)=>{const n=Math.max(3,Math.round(w/38)),birds=[];for(let k=0;k<n;k++)birds.push({dx:16+(w-32)*(k/(n-1)),ph:R()*6,vx:(R()-0.3)*3,vy:-3-R()*2,face:R()<0.5?-1:1});pigeons.push({a:x,b:x+w,state:0,t:0,birds});};
-  const moto=(x)=>motos.push({trig:x,state:0,t:0,x:0});
+  const moto=(x,tall)=>motos.push({trig:x,state:0,t:0,x:0,tall:tall==null?R()<0.5:tall});
   const attn=(x)=>attns.push({a:x,state:0,t:0,dur:60});
   const decoy=(x)=>decoys.push({x});
   const fly=(m,label,kind,y)=>{const sp=speedAt(def,m),fs=def.fly||4;flies.push({m,x:m+VW+20-PX-sp*(VW+20-PX)/(sp+fs),y:y||GROUND-30,fs,active:false,broken:false,label,kind:kind||'board'});};
@@ -279,6 +279,7 @@ function genStage(i){
     add('tall',4300,lbl('높은 콘 탑 · 이단 점프!','높은 콘 탑 · 이단 점프!'));
     x=5100;
   }
+  if(def.motoTutorial){moto(1400,false);moto(2600,true);x=3500;}
   if(def.potTutorial){
     pot(1300,lbl('떨어지는 화분 · 왼쪽으로 쓸어 뒤로 피하기!','떨어지는 화분 · ← 키로 뒤로 피하기!'));
     pot(2300,lbl('점프·슬라이드로는 못 피해요','점프·슬라이드로는 못 피해요'));
@@ -591,16 +592,16 @@ function updatePlay(){
       else{g.state=1;g.t=0;SFX.flap();}
     }
   }
-  // delivery motorbike from behind
+  // delivery motorbike coming head-on from the front: enters at the right edge with a horn, only a double jump clears it
   for(const mo of S.motos){
-    if(mo.state===0){if(dist+PX>=mo.trig){mo.state=1;mo.t=0;SFX.horn();floatText(dist+60,GROUND-120,'빵빵!','#ffd27a');}else continue;}
+    if(mo.state===0){if(dist+PX>=mo.trig){mo.state=2;mo.t=0;mo.x=dist+VW+30;SFX.horn();floatText(dist+VW-70,GROUND-170,'빵빵!','#ffd27a');}else continue;}
     if(mo.state===3)continue;
     mo.t++;
-    if(mo.state===1){if(mo.t===22)SFX.horn();if(mo.t>=44){mo.state=2;mo.x=dist-90;}else continue;}
-    mo.x+=speed+8;
-    if(frame%3===0)particles.push({x:mo.x-dist,y:GROUND-14,vx:-1,vy:-0.3,g:-0.01,life:24,max:24,color:'rgba(160,160,170,.6)',r:3});
-    if(!mo.hit&&inter(hb,{x:mo.x,y:GROUND-138,w:84,h:138},4)){mo.hit=true;if(motoHit(mo))return;}
-    if(mo.x>dist+VW+120)mo.state=3;
+    if(mo.t===20)SFX.horn();
+    mo.x-=3;
+    if(frame%3===0)particles.push({x:mo.x+84-dist,y:GROUND-14,vx:1,vy:-0.3,g:-0.01,life:24,max:24,color:'rgba(160,160,170,.6)',r:3});
+    if(!mo.hit&&inter(hb,{x:mo.x,y:GROUND-(mo.tall?138:88),w:mo.tall?84:70,h:mo.tall?138:88},4)){mo.hit=true;if(motoHit(mo))return;}
+    if(mo.x<dist-160)mo.state=3;
   }
   // fake finish line
   for(const f of S.fakes){
@@ -967,17 +968,19 @@ function drawMotos(){
   for(const mo of S.motos){
     if(mo.state!==2)continue;
     const x=mo.x-dist,b=GROUND,bump=Math.sin(frame*0.6)*1.2;
-    ctx.save();ctx.lineJoin='round';ctx.lineCap='round';
+    // faces left (oncoming); the low-load bike is a smaller scooter so a single jump clears it
+    ctx.save();ctx.translate(2*x+(mo.tall?84:69),0);ctx.scale(-1,1);if(!mo.tall){ctx.translate(x,b);ctx.scale(0.82,0.82);ctx.translate(-x,-b);}ctx.lineJoin='round';ctx.lineCap='round';
     ctx.strokeStyle='rgba(255,255,255,.7)';ctx.lineWidth=3;ctx.beginPath();
     for(let k=0;k<3;k++){ctx.moveTo(x-8-k*6,b-34-k*26);ctx.lineTo(x-40-k*10,b-34-k*26);}ctx.stroke();
     // parcels tied on the rear rack
-    for(let i=0;i<4;i++){
+    const nBox=mo.tall?4:1;
+    for(let i=0;i<nBox;i++){
       const off=Math.sin(frame*0.3+i)*1.5*(i/3),y=b-58-i*20+bump;
       ctx.fillStyle=i%2?'#d6a86c':'#c99a5e';rr(x+1+off,y,36,20,2);ctx.fill();
       ctx.strokeStyle='#8a6238';ctx.lineWidth=1.6;ctx.stroke();
       ctx.fillStyle='#ecd9b0';ctx.fillRect(x+16+off,y,6,20);
     }
-    ctx.strokeStyle='#5a4a3a';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x+4,b-140+bump);ctx.lineTo(x+34,b-58+bump);ctx.stroke();
+    if(mo.tall){ctx.strokeStyle='#5a4a3a';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x+4,b-140+bump);ctx.lineTo(x+34,b-58+bump);ctx.stroke();}
     ctx.fillStyle='#3b3f4a';ctx.fillRect(x+2,b-40+bump,40,4);
     // wheels
     for(const wx2 of [x+18,x+68]){ctx.fillStyle='#262a33';circle(wx2,b-10,11);ctx.fillStyle='#c9ced8';circle(wx2,b-10,4.5);}
@@ -1413,7 +1416,7 @@ function draw(){
       {h:34,draw:(x,y)=>drawBeltIcon(x,y,b[1],1.4)});
   }
   else if(state==='gameover'){
-    const T={hit:['꽈당!',null],pit:['풍덩!',null],sticky:['끈끈이에 붙었다!','끈끈이는 2단 점프로 멀리 넘어가요'],zap:['벼락 맞았다!','여기는 2단 점프 금지 구역!'],ironkick:['발이 얼얼!','철판은 차지 말고 피하세요 (점프·슬라이드)'],iron:['철판에 맞았다!','철판은 높이를 따라오지 않아요'],ice:['미끄러져 꽈당!','빙판 위에서는 점프 금지!'],pot:['화분에 맞았다!','떨어지는 건 뒤로 피하기만 통해요'],pigeon:['비둘기 습격!','비둘기는 그냥 달려서 지나가요'],moto:['오토바이에 치였다!','오토바이는 2단 점프로만 넘을 수 있어요'],attn:['차렷 안 했지!','사범님이 차렷 하면 아무것도 누르지 마세요']}[deathCause];
+    const T={hit:['꽈당!',null],pit:['풍덩!',null],sticky:['끈끈이에 붙었다!','끈끈이는 2단 점프로 멀리 넘어가요'],zap:['벼락 맞았다!','여기는 2단 점프 금지 구역!'],ironkick:['발이 얼얼!','철판은 차지 말고 피하세요 (점프·슬라이드)'],iron:['철판에 맞았다!','철판은 높이를 따라오지 않아요'],ice:['미끄러져 꽈당!','빙판 위에서는 점프 금지!'],pot:['화분에 맞았다!','떨어지는 건 뒤로 피하기만 통해요'],pigeon:['비둘기 습격!','비둘기는 그냥 달려서 지나가요'],moto:['오토바이에 치였다!','짐이 낮으면 1단, 짐이 높으면 2단 점프!'],attn:['차렷 안 했지!','사범님이 차렷 하면 아무것도 누르지 마세요']}[deathCause];
     const L=[{t:T[0],size:38,color:'#ff9a7a'}];
     if(T[1])L.push({t:T[1],size:18,color:'#ffd27a'});
     L.push({t:'STAGE '+(stageIdx+1)+' · '+Math.floor(lastProg*100)+'% · 이 스테이지 '+tries+'번째 실패',size:19});
