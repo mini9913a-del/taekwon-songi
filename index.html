@@ -106,7 +106,7 @@ const GRAV=0.62,JUMP=-12.4,JUMP2=-10.8;
 const FONT='"Jua","Apple SD Gothic Neo","Malgun Gothic",sans-serif';
 const C_PAPER='#fff8ee',C_GOLD='#f2b544',C_RED='#e5534b',C_MUTED='#b9afc2',C_INK='#1f1a24';
 const cv=document.getElementById('game');
-let ctx=cv.getContext('2d');const MAINCTX=ctx;let DPRV=1;
+let ctx=cv.getContext('2d',{alpha:false});const MAINCTX=ctx;let DPRV=1;
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 // The view is always 480 units tall; width follows the screen shape (wider phones see further ahead).
 // Full-screen when installed as an app, or on a phone held sideways.
@@ -116,7 +116,7 @@ function isFull(){return mqLand.matches||mqApp.matches||window.navigator.standal
 function fit(){
   const full=isFull();
   document.documentElement.classList.toggle('full',full);
-  const d=Math.min(window.devicePixelRatio||1,2);
+  const d=Math.min(window.devicePixelRatio||1,(window.matchMedia&&window.matchMedia('(pointer:coarse)').matches)?1.5:2);
   if(full){
     // fill the screen; wide screens see further ahead (up to 1100 units), anything else is letterboxed, never stretched
     const box=cv.parentElement.getBoundingClientRect(),cs=getComputedStyle(cv.parentElement);
@@ -757,20 +757,29 @@ function drawSongiFront(x,y,t,scale){
   ctx.restore();
 }
 const c0=Math.cos;
-const SOC=document.createElement('canvas'),SOX=SOC.getContext('2d'),SIC=document.createElement('canvas'),SIX=SIC.getContext('2d');
+const SPR=new Map();
+function songiSprite(pose,t,scale,spinRot){
+  const TW=Math.PI*2,tq=Math.round((((t%(TW*5))+TW*5)%(TW*5))/(TW/16)),sq=Math.round((spinRot||0)/(TW/24));
+  const bc=Array.isArray(beltColor)?beltColor.join(','):beltColor,d=DPRV;
+  const key=pose+'|'+tq+'|'+scale+'|'+sq+'|'+bc+'|'+d;
+  let c=SPR.get(key);if(c)return c;
+  const B=Math.ceil(120*scale),AX=B/2,AY=B*0.68,px=Math.ceil(B*d);
+  const so=document.createElement('canvas');so.width=so.height=px;const sx=so.getContext('2d');sx.setTransform(d,0,0,d,0,0);
+  ctx=sx;try{drawSongi(AX,AY,pose,tq*(TW/16),scale,sq*(TW/24));}finally{ctx=MAINCTX;}
+  const si=document.createElement('canvas');si.width=si.height=px;const ix=si.getContext('2d');
+  ix.drawImage(so,0,0);ix.globalCompositeOperation='source-in';ix.fillStyle='#fff8ec';ix.fillRect(0,0,px,px);
+  const out=document.createElement('canvas');out.width=out.height=px;const ox=out.getContext('2d');
+  const o=2.2*d;ox.globalAlpha=0.95;for(let i=0;i<8;i++){const a=i*Math.PI/4;ox.drawImage(si,Math.cos(a)*o,Math.sin(a)*o);}
+  ox.globalAlpha=1;ox.drawImage(so,0,0);
+  c={cv:out,B,AX,AY};
+  if(SPR.size>140)SPR.delete(SPR.keys().next().value);
+  SPR.set(key,c);return c;
+}
 function drawSongiStk(x,y,pose,t,scale,spinRot,flt){
-  const B=Math.ceil(120*scale),AX=B/2,AY=B*0.68,d=DPRV,px=Math.ceil(B*d);
-  if(SOC.width!==px){SOC.width=SOC.height=SIC.width=SIC.height=px;}
-  SOX.setTransform(1,0,0,1,0,0);SOX.clearRect(0,0,px,px);SOX.setTransform(d,0,0,d,0,0);
-  ctx=SOX;try{drawSongi(AX,AY,pose,t,scale,spinRot);}finally{ctx=MAINCTX;}
-  SIX.globalCompositeOperation='source-over';SIX.clearRect(0,0,px,px);SIX.drawImage(SOC,0,0);
-  SIX.globalCompositeOperation='source-in';SIX.fillStyle='#fff8ec';SIX.fillRect(0,0,px,px);
-  const L=x-AX,T=y-AY,o=2.2;
-  ctx.save();if(flt&&'filter' in ctx)ctx.filter=flt;
-  ctx.globalAlpha=0.95;
-  for(let i=0;i<8;i++){const a=i*Math.PI/4;ctx.drawImage(SIC,L+Math.cos(a)*o,T+Math.sin(a)*o,B,B);}
-  ctx.globalAlpha=1;ctx.drawImage(SOC,L,T,B,B);
-  ctx.restore();
+  const c=songiSprite(pose,t,scale,spinRot);
+  if(flt&&'filter' in ctx){ctx.save();ctx.filter=flt;}
+  ctx.drawImage(c.cv,x-c.AX,y-c.AY,c.B,c.B);
+  if(flt&&'filter' in ctx)ctx.restore();
 }
 function drawSongi(x,y,pose,t,scale,spinRot){
   scale=scale||1;
@@ -1138,7 +1147,10 @@ function drawBackground(th,c){
   }
 }
 function groundFill(th,x,w){
-  if(bgOk(th)){const b=BGIMG[th],h=b.gr.naturalHeight;tileImg(b.gr,dist,VH-h,h);tileImg(b.gr,dist,gTop(th),h);return;}
+  if(bgOk(th)){const b=BGIMG[th],img=b.gr,h=img.naturalHeight,W=img.naturalWidth,top=gTop(th),gap=VH-(top+h);
+    tileImg(img,dist,top,h);
+    if(gap>0){const o=((dist%W)+W)%W;for(let x=-o;x<VW;x+=W)ctx.drawImage(img,0,h-gap-1,W,gap+1,Math.floor(x),VH-gap-1,W+1,gap+1);}
+    return;}
   if(th==='park'){
     ctx.fillStyle='#9b6b47';ctx.fillRect(x,GROUND,w,VH-GROUND);
     ctx.fillStyle='#7f5434';for(let wx=Math.floor(dist/40)*40;wx<dist+VW+40;wx+=40){const h=hash(wx,3);circle(wx-dist+(h%30),GROUND+26+(h>>5)%40,2.4);}
@@ -1163,15 +1175,20 @@ function groundFill(th,x,w){
     }
   }
 }
+let PITG=null;
 function drawGround(th){
   const s=dist,e=dist+VW,segs=[];let cur=s;
   for(const p of S.pits){if(p.b<s)continue;if(p.a>e)break;if(p.a>cur)segs.push([cur,p.a]);cur=Math.max(cur,p.b);}
   if(cur<e)segs.push([cur,e]);
   const pimg=bgOk(th);
-  for(const p of S.pits){if(p.b<s||p.a>e)continue;
-    if(pimg){const bi=BGIMG[th],y0=bi.pt+GROUND-bi.foot,hg=ctx.createLinearGradient(0,y0,0,VH);hg.addColorStop(0,'#7a5a40');hg.addColorStop(0.18,'#4a3426');hg.addColorStop(0.5,'#24170f');hg.addColorStop(1,'#0e0908');ctx.fillStyle=hg;ctx.fillRect(p.a-dist,y0,p.b-p.a,VH-y0);ctx.fillStyle='rgba(0,0,0,.25)';ctx.fillRect(p.a-dist,y0,p.b-p.a,3);}
+  if(!pimg)for(const p of S.pits){if(p.b<s||p.a>e)continue;
     const g=ctx.createLinearGradient(0,GROUND,0,VH);g.addColorStop(0,'rgba(20,14,24,.55)');g.addColorStop(1,'rgba(20,14,24,.95)');
     ctx.fillStyle=g;ctx.fillRect(p.a-dist,GROUND+6,p.b-p.a,VH-GROUND);}
+  if(pimg){groundFill(th,0,VW);
+    for(const p of S.pits){if(p.b<s||p.a>e)continue;const bi=BGIMG[th],y0=bi.pt+GROUND-bi.foot,x=p.a-dist,w=p.b-p.a;
+      ctx.fillStyle=PITG||(PITG=(()=>{const hg=ctx.createLinearGradient(0,y0,0,VH);hg.addColorStop(0,'#7a5a40');hg.addColorStop(0.18,'#4a3426');hg.addColorStop(0.5,'#24170f');hg.addColorStop(1,'#0e0908');return hg;})());
+      ctx.fillRect(x,y0,w,VH-y0);ctx.fillStyle='rgba(0,0,0,.25)';ctx.fillRect(x,y0,w,3);ctx.fillStyle='rgba(0,0,0,.3)';ctx.fillRect(x,y0,3,VH-y0);ctx.fillRect(x+w-3,y0,3,VH-y0);}
+    return;}
   for(const sg of segs){const x=sg[0]-dist,w=sg[1]-sg[0];const gt=gTop(th);ctx.save();ctx.beginPath();ctx.rect(x,gt,w,VH-gt);ctx.clip();groundFill(th,x,w);ctx.restore();
     ctx.fillStyle='rgba(0,0,0,.18)';if(sg[0]>s+1)ctx.fillRect(x,GROUND,3,VH-GROUND);if(sg[1]<e-1)ctx.fillRect(x+w-3,GROUND,3,VH-GROUND);}
 }
